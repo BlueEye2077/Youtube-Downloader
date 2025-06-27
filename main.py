@@ -171,10 +171,6 @@ if "__main__" == __name__:
             
 
 
-def shit_show():
-    print("'hello")
-    
-
 
 
 
