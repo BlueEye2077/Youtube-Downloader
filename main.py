@@ -172,7 +172,9 @@ if "__main__" == __name__:
 
 
 def shit_show():
-    print("coco")
+    print("'hello")
+    
+
 
 
 
