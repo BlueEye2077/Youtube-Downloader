@@ -6,6 +6,7 @@ def tqdm_hook(status):
         total = status.get('total_bytes') or status.get('total_bytes_estimate')
         downloaded = status.get('downloaded_bytes', 0)
 
+
         if not hasattr(tqdm_hook, 'bar') and total:
             tqdm_hook.bar = tqdm(
                 total=total,
@@ -15,11 +16,14 @@ def tqdm_hook(status):
                 desc='📥 Downloading',
                 dynamic_ncols=True,
                 leave=True,
+
+
             )
 
         if hasattr(tqdm_hook, 'bar'):
             tqdm_hook.bar.n = downloaded
             tqdm_hook.bar.refresh()
+            
 
     elif status['status'] == 'finished':
         if hasattr(tqdm_hook, 'bar'):
@@ -34,9 +38,9 @@ class MyLogger:
     def warning(self, msg): pass
     def error(self, msg): print(f"❌ Error: {msg}")
 
-def get_available_qualities(video_url):
+def get_available_qualities(video_url,advanced=False):
     yt_dlp_opts = {
-        'listformats': True,
+        'listformats': advanced,
         'quiet': True,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
     }
@@ -44,12 +48,17 @@ def get_available_qualities(video_url):
     with yt_dlp.YoutubeDL(yt_dlp_opts) as ydl:
         # qualities_set= set() 
         reslution_dict ={}
+        audio_sizes=[]
 
         # file info all keys =>
         # dict_keys(['id', 'title', 'formats', 'thumbnails', 'thumbnail', 'description', 'channel_id', 'channel_url', 'duration', 'view_count', 'average_rating', 'age_limit', 'webpage_url', 'categories', 'tags', 'playable_in_embed', 'live_status', 'media_type', 'release_timestamp', '_format_sort_fields', 'automatic_captions', 'subtitles', 'comment_count', 'chapters', 'heatmap', 'like_count', 'channel', 'channel_follower_count', 'channel_is_verified', 'uploader', 'uploader_id', 'uploader_url', 'upload_date', 'timestamp', 'availability', 'original_url', 'webpage_url_basename', 'webpage_url_domain', 'extractor', 'extractor_key', 'playlist', 'playlist_index', 'display_id', 'fulltitle', 'duration_string', 'release_year', 'is_live', 'was_live', 'requested_subtitles', '_has_drm', 'epoch'])
 
         file_info=ydl.extract_info(video_url,download=False)
-        
+        video_title= file_info.get("title","Title Not Found")
+
+        print("="*50)
+        print(f"Video Title: {video_title}\n")
+
         # file_formats is a 'list' includes dicts with these keys =>
         # dict_keys(['asr', 'filesize', 'format_id', 'format_note', 'source_preference', 'fps', 'audio_channels',
         # 'height', 'quality', 'has_drm', 'tbr', 'filesize_approx', 'url', 'width', 'language', 'language_preference',
@@ -78,6 +87,7 @@ def get_available_qualities(video_url):
             f_height = f.get('height',None)
             f_tbr=f.get("tbr",None)
             f_filesize=f.get("filesize",None)
+            
 
             if f_height and f_height>= 144:
                 if f_height not in reslution_dict:
@@ -86,8 +96,13 @@ def get_available_qualities(video_url):
                 if isinstance(f_tbr,(float , int)) and isinstance(f_filesize,(float , int)):
                     reslution_dict[f_height]["tbr"].append(f_tbr if isinstance(f_tbr,(float , int)) else 0 )
                     reslution_dict[f_height]["filesize"].append(f_filesize if isinstance(f_filesize,(float , int)) else 0)
-            
-    return reslution_dict
+
+            if f.get('resolution','Resolution Not Found') == "audio only"  and isinstance(f.get("filesize","Size Not Found"),(int,float)):
+                audio_sizes.append(f.get("filesize","Size Not Found"))     
+
+
+
+    return reslution_dict,audio_sizes
 
 # ======================================================================================
 
@@ -104,16 +119,22 @@ def clear_empty_data(wanted_dict):
 
 # ======================================================================================
 
-def print_available_qualities(resolution_dict : dict):
+def print_available_qualities(resolution_dict : dict, audio_sizes : list):
     numbered_resolutions_dict={}
     try:
         if resolution_dict:
             print("Available Qualities:")
             print()
+            audio_size= max(audio_sizes)/(1024*1024)
+            resolution_dict.update({"mp3":{"filesize":audio_sizes}})
             for num, (key, value) in enumerate(resolution_dict.items(), start=1):
                 video_size = max(value["filesize"])/(1024*1024)
                 numbered_resolutions_dict.update({num:key})
-                print(f"{num}-{key}p\t=> {video_size:.2f} MB") if len(str(int(video_size))) < 4 else print(f"{num}-{key}p\t=> {video_size/1024:.2f} GB") 
+                if key not in ["mp3","m4a"]:
+                    print(f"{num}- {key}p\t=> {video_size+audio_size:.2f} MB") if len(str(int(video_size+audio_size))) < 4 else print(f"{num}-{key}p\t=> {video_size/1024:.2f} GB",end="") 
+                else:
+                    print(f"{num}- {key.upper()}\t=> {audio_size:.2f} MB") if len(str(int(video_size+audio_size))) < 4 else print(f"{num}-{key}p\t=> {video_size/1024:.2f} GB",end="") 
+                    
         
     except Exception as e:
         print(f"An error occurred while getting available qualities: {e}")
@@ -123,21 +144,43 @@ def print_available_qualities(resolution_dict : dict):
         
 # ======================================================================================
 
-def download_video(video_url, wanted_quality,subtitle=False,thumbnail=False):
+def download_video(video_url,
+                    wanted_quality=False,
+                    wanted_extention=False,
+                    subtitle=False,
+                    donwload_thumbnail=False,
+                    metadata=False,
+                    download_promt=False):
+    
     yt_dlp_opts = {
-        'format': f'bestvideo[height<={wanted_quality}]+bestaudio/best',
+        # 'format': f'140',
+        # 'format': f'bestaudio/best',
+        'format': f'bestvideo[height<={wanted_quality}]+bestaudio/best' if wanted_quality else download_promt,
         'outtmpl': '%(title)s.%(ext)s',
         'quiet': True,
         "no_warnings": True,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/",
-        "concurrent_fragment_downloads":10,
+        "concurrent_fragment_downloads":6,
         'throttled_rate': None,
         "embedthumbnail":True,
         "logger": MyLogger(),
         "embedmetadata":True,
-        "merge_output_format":"mp4",
         "progress_hooks": [tqdm_hook],
+
+        # optional arguments
+
+        "writesubtitles":subtitle,
+        "writeautomaticsub":subtitle,
+        "subtitleslangs":[] if subtitle else False,
+
+        "writethumbnail":donwload_thumbnail,
+        "merge_output_format":wanted_extention,
+        "embedmetadata": metadata
     }
+
+
+
+
     with yt_dlp.YoutubeDL(yt_dlp_opts) as ydl:
         try:
             ydl.download([video_url])
@@ -148,17 +191,64 @@ def download_video(video_url, wanted_quality,subtitle=False,thumbnail=False):
 # ======================================================================================
 
 if "__main__" == __name__:
+
+    more_settings='''
+1- Download Subtitles
+2- Download Thumbnail
+3- Download Meta Data'''
+
+    options= ["1","2","3"]
+
+    more_settings={
+        1:True,
+        2:True,
+        3:True,
+    }
+
     try:
-        print("Please Enter The Video URL")
-        user_video_url=input("=> ") 
-        print("Fetching Available Formats... Please Wait.")
-        resoultion_dict = get_available_qualities(user_video_url.strip())
-        resoultion_dict= clear_empty_data(resoultion_dict)
-        numbered_resolutions_dict=print_available_qualities(resoultion_dict)
-        print("="*50)
-        print("Choose A Quality To Download:")
-        wanted_quality = input("=> ").strip()
-        download_video(user_video_url,numbered_resolutions_dict[int(wanted_quality)])
+        chosen_mode=input("Choose A Mode To Use\n1- Simple Mode\n2- Advanced Mode\n=> ")
+
+        if chosen_mode == "1" :
+            print("Please Enter The Video URL")
+            user_video_url=input("=> ") 
+
+            print("Fetching Available Formats... Please Wait.")
+            resoultion_dict,audio_list = get_available_qualities(user_video_url.strip())
+            resoultion_dict= clear_empty_data(resoultion_dict)
+            numbered_resolutions_dict=print_available_qualities(resoultion_dict,audio_list)
+            print("="*50)
+            print("Type The Number Of Quality To Download: [ex:5]")
+            wanted_quality = input("=> ").strip()
+
+            add_settings=input("Do You Want Additional Settings(y/n)")
+            if add_settings.lower() == "y":
+
+                user_options = input("Write The Wanted Options [ex: 1,3]")
+                user_options=user_options.split(",")
+                print(user_options)
+                # if user_options:
+                # download_video(user_video_url,wanted_quality= numbered_resolutions_dict[int(wanted_quality)])
+                    
+
+
+
+                
+            else:
+                download_video(user_video_url,wanted_quality= numbered_resolutions_dict[int(wanted_quality)])
+
+
+
+
+        else:
+            print("Please Enter The Video URL")
+            user_video_url=input("=> ") 
+            
+            print("Fetching Available Formats... Please Wait.")
+            resoultion_dict,audio_list = get_available_qualities(user_video_url.strip(),advanced=True)
+
+            print("Type The Combination You Want To Download: [ex:5]")
+            wanted_promt = input("=> ").strip()
+            download_video(user_video_url,download_promt=wanted_promt)
 
     except Exception as e:
         print(f"An error occurred: {e}")
