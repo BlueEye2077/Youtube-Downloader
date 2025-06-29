@@ -1,5 +1,13 @@
 import yt_dlp ;
 from tqdm import tqdm
+import re 
+
+def get_re_patterens (user_input):
+    result=re.findall(r"[1-3]",user_input)
+    result=set(result)
+    return result
+
+
 
 def tqdm_hook(status):
     if status['status'] == 'downloading':
@@ -104,6 +112,7 @@ def get_available_qualities(video_url,advanced=False):
 
     return reslution_dict,audio_sizes
 
+
 # ======================================================================================
 
 def clear_empty_data(wanted_dict):
@@ -126,14 +135,14 @@ def print_available_qualities(resolution_dict : dict, audio_sizes : list):
             print("Available Qualities:")
             print()
             audio_size= max(audio_sizes)/(1024*1024)
-            resolution_dict.update({"mp3":{"filesize":audio_sizes}})
+            resolution_dict.update({"audio":{"filesize":audio_sizes}})
             for num, (key, value) in enumerate(resolution_dict.items(), start=1):
                 video_size = max(value["filesize"])/(1024*1024)
                 numbered_resolutions_dict.update({num:key})
-                if key not in ["mp3","m4a"]:
+                if key not in ["mp3","m4a","audio"]:
                     print(f"{num}- {key}p\t=> {video_size+audio_size:.2f} MB") if len(str(int(video_size+audio_size))) < 4 else print(f"{num}-{key}p\t=> {video_size/1024:.2f} GB",end="") 
                 else:
-                    print(f"{num}- {key.upper()}\t=> {audio_size:.2f} MB") if len(str(int(video_size+audio_size))) < 4 else print(f"{num}-{key}p\t=> {video_size/1024:.2f} GB",end="") 
+                    print(f"{num}- {key.capitalize()}\t=> {audio_size:.2f} MB") if len(str(int(video_size+audio_size))) < 4 else print(f"{num}-{key}p\t=> {video_size/1024:.2f} GB",end="") 
                     
         
     except Exception as e:
@@ -143,42 +152,55 @@ def print_available_qualities(resolution_dict : dict, audio_sizes : list):
         return numbered_resolutions_dict
         
 # ======================================================================================
-
+# download_video Function
 def download_video(video_url,
                     wanted_quality=False,
-                    wanted_extention=False,
                     subtitle=False,
                     donwload_thumbnail=False,
                     metadata=False,
-                    download_promt=False):
-    
+                    download_promt=False,
+                    wanted_video_format="mp4"
+                    ):
+
     yt_dlp_opts = {
         # 'format': f'140',
         # 'format': f'bestaudio/best',
         'format': f'bestvideo[height<={wanted_quality}]+bestaudio/best' if wanted_quality else download_promt,
+        "merge_output_format":wanted_video_format if wanted_video_format else "mp4",
         'outtmpl': '%(title)s.%(ext)s',
         'quiet': True,
         "no_warnings": True,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/",
-        "concurrent_fragment_downloads":6,
+        "concurrent_fragment_downloads":10,
         'throttled_rate': None,
+        "writethumbnail":True,
         "embedthumbnail":True,
+        
+        'cookiefile':"www.youtube.com_cookies.txt",
+
         "logger": MyLogger(),
-        "embedmetadata":True,
         "progress_hooks": [tqdm_hook],
 
-        # optional arguments
+        "embedmetadata": metadata,
+        "writeinfojson": metadata,
 
+        'postprocessors': [
+            {
+        'key': 'FFmpegThumbnailsConvertor',
+        'format': 'jpg',
+    },{
+        'key': 'EmbedThumbnail',
+        # true => download a seperate file
+        # false => embed and delete
+        'already_have_thumbnail': donwload_thumbnail, 
+    },],
+
+
+        # optional arguments
         "writesubtitles":subtitle,
         "writeautomaticsub":subtitle,
-        "subtitleslangs":[] if subtitle else False,
-
-        "writethumbnail":donwload_thumbnail,
-        "merge_output_format":wanted_extention,
-        "embedmetadata": metadata
+        "subtitleslangs":["ar","en"] if subtitle else [],
     }
-
-
 
 
     with yt_dlp.YoutubeDL(yt_dlp_opts) as ydl:
@@ -189,25 +211,96 @@ def download_video(video_url,
             print(f"An error occurred during download: {e}")
 
 # ======================================================================================
+def download_audio(video_url,
+                    subtitle=False,
+                    donwload_thumbnail=False,
+                    metadata=False,
+                    download_promt=False,
+                    wanted_format="mp3"
+                    ):
+    yt_dlp_opts = {
+
+        'format': 'bestaudio/best',
+        'outtmpl': '%(title)s.%(ext)s',
+        'quiet': True,
+        "no_warnings": True,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/",
+        "concurrent_fragment_downloads":10,
+        'throttled_rate': None,
+        "writethumbnail":True,
+        "embedthumbnail":True,
+        
+        'cookiefile':"www.youtube.com_cookies.txt",
+
+        "logger": MyLogger(),
+        "progress_hooks": [tqdm_hook],
+
+        "embedmetadata": metadata,
+        "writeinfojson": metadata,
+
+        'postprocessors': [
+    {
+        'key': 'FFmpegExtractAudio',
+        # 'preferredcodec': "mp3",
+        'preferredcodec': wanted_format if wanted_format else "mp3",
+        'preferredquality': '0',
+        },
+            {
+        'key': 'FFmpegThumbnailsConvertor',
+        'format': 'jpg',
+    },{
+        'key': 'EmbedThumbnail',
+        # true => download a sepera
+        'already_have_thumbnail': donwload_thumbnail, 
+    },
+    ],
+
+
+        # optional arguments
+        "writesubtitles":subtitle,
+        "writeautomaticsub":subtitle,
+        "subtitleslangs":["ar","en"] if subtitle else [],
+    }
+
+
+    with yt_dlp.YoutubeDL(yt_dlp_opts) as ydl:
+        try:
+            ydl.download([video_url])
+            print("Download Completed Successfully!")
+        except Exception as e:
+            print(f"An error occurred during download: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ======================================================================================
 
 if "__main__" == __name__:
 
-    more_settings='''
+    more_settings_text='''
 1- Download Subtitles
 2- Download Thumbnail
 3- Download Meta Data'''
 
-    options= ["1","2","3"]
-
-    more_settings={
-        1:True,
-        2:True,
-        3:True,
-    }
+    download_subtitles = False
+    download_thumbnail = False
+    download_meta_data = False
 
     try:
         chosen_mode=input("Choose A Mode To Use\n1- Simple Mode\n2- Advanced Mode\n=> ")
 
+    # Simple Mode:
         if chosen_mode == "1" :
             print("Please Enter The Video URL")
             user_video_url=input("=> ") 
@@ -220,26 +313,76 @@ if "__main__" == __name__:
             print("Type The Number Of Quality To Download: [ex:5]")
             wanted_quality = input("=> ").strip()
 
-            add_settings=input("Do You Want Additional Settings(y/n)")
-            if add_settings.lower() == "y":
+            # check if user want's video or audio
+            if numbered_resolutions_dict[int(wanted_quality)] != "audio":
 
-                user_options = input("Write The Wanted Options [ex: 1,3]")
-                user_options=user_options.split(",")
-                print(user_options)
-                # if user_options:
-                # download_video(user_video_url,wanted_quality= numbered_resolutions_dict[int(wanted_quality)])
+                wanted_video_format= input("Please Input The Wanted Format:[ex:mp4/mkv]\n=> ").strip().lower()
+
+                add_settings=input("Do You Want Additional Settings(y/n):\n=> ")
+
+                # Additional Settings 
+                if add_settings.lower() == "y":
+                    print(more_settings_text)
+                    user_options = input("Write The Wanted Options [ex: 1,3]:\n=> ")
+                    user_options=get_re_patterens(user_options)
+
+                    if '1' in user_options :
+                        download_subtitles = True
+                    if '2' in user_options :
+                        download_thumbnail = True
+                    if '3' in  user_options :
+                        download_meta_data = True
+                        
+
+                    download_video(user_video_url,
+                                    wanted_quality= numbered_resolutions_dict[int(wanted_quality)],
+                                    subtitle=download_subtitles,
+                                    donwload_thumbnail=download_thumbnail,
+                                    metadata=download_meta_data,
+                                    wanted_video_format=wanted_video_format)      
                     
+                # No Additional Settings   
+                else:
+                    download_video(user_video_url,
+                                    wanted_quality= numbered_resolutions_dict[int(wanted_quality)],
+                                    wanted_video_format=wanted_video_format)
+                    
+            # check if user want's video or audio
+            elif numbered_resolutions_dict[int(wanted_quality)] == "audio":
 
+                wanted_audio_format= input("Please Input The Wanted Audio Format:[ex:mp3/m4a]\n=> ").strip().lower()
 
+                add_settings=input("Do You Want Additional Settings(y/N):\n=> ")
 
-                
-            else:
-                download_video(user_video_url,wanted_quality= numbered_resolutions_dict[int(wanted_quality)])
+                # Additional Settings 
+                if add_settings.lower() == "y":
+                    print(more_settings_text)
+                    user_options = input("Write The Wanted Options [ex: 1,3]:\n=> ")
+                    user_options=get_re_patterens(user_options)
 
+                    if '1' in user_options :
+                        download_subtitles = True
+                    if '2' in user_options :
+                        download_thumbnail = True
+                    if '3' in  user_options :
+                        download_meta_data = True
+                        
 
+                    download_audio(user_video_url,
+                                    subtitle=download_subtitles,
+                                    donwload_thumbnail=download_thumbnail,
+                                    metadata=download_meta_data,
+                                    wanted_audio_format=wanted_audio_format)      
+                    
+                # No Additional Settings   
+                else:
+                    download_audio(user_video_url,
+                                    wanted_format=wanted_audio_format
+                                    )
+        # ===========================================================================
+        # Advanced Mode :
 
-
-        else:
+        elif chosen_mode == "2":
             print("Please Enter The Video URL")
             user_video_url=input("=> ") 
             
