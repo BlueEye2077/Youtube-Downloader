@@ -190,13 +190,18 @@ def download_video(video_url,
         'format': 'jpg',
     },{
         'key': 'EmbedThumbnail',
-        # true => download a seperate file
-        # false => embed and delete
+        # true => download a seperate file => it only borrow it because its not his
+        # false => embed and delete => his thumbnail can do whatever it wants
         'already_have_thumbnail': donwload_thumbnail, 
-    },],
+    },
+    {
+            'key': 'FFmpegEmbedSubtitle',
+            'already_have_subtitle': False
+        }],
 
 
         # optional arguments
+        "embedsubtitles":subtitle,
         "writesubtitles":subtitle,
         "writeautomaticsub":subtitle,
         "subtitleslangs":["ar","en"] if subtitle else [],
@@ -219,7 +224,6 @@ def download_audio(video_url,
                     wanted_format="mp3"
                     ):
     yt_dlp_opts = {
-
         'format': 'bestaudio/best',
         'outtmpl': '%(title)s.%(ext)s',
         'quiet': True,
@@ -253,12 +257,14 @@ def download_audio(video_url,
         # true => download a sepera
         'already_have_thumbnail': donwload_thumbnail, 
     },
+
     ],
 
 
         # optional arguments
-        "writesubtitles":subtitle,
-        "writeautomaticsub":subtitle,
+        # "embedsubtitles":subtitle,
+        # "writesubtitles":subtitle,
+        # "writeautomaticsub":subtitle,
         "subtitleslangs":["ar","en"] if subtitle else [],
     }
 
@@ -292,6 +298,9 @@ if "__main__" == __name__:
 1- Download Subtitles
 2- Download Thumbnail
 3- Download Meta Data'''
+    more_audio_settings_text='''
+1- Download Thumbnail
+2- Download Meta Data'''
 
     download_subtitles = False
     download_thumbnail = False
@@ -351,20 +360,18 @@ if "__main__" == __name__:
             elif numbered_resolutions_dict[int(wanted_quality)] == "audio":
 
                 wanted_audio_format= input("Please Input The Wanted Audio Format:[ex:mp3/m4a]\n=> ").strip().lower()
-
+                print(wanted_audio_format)
                 add_settings=input("Do You Want Additional Settings(y/N):\n=> ")
 
                 # Additional Settings 
                 if add_settings.lower() == "y":
-                    print(more_settings_text)
+                    print(more_audio_settings_text)
                     user_options = input("Write The Wanted Options [ex: 1,3]:\n=> ")
                     user_options=get_re_patterens(user_options)
 
                     if '1' in user_options :
-                        download_subtitles = True
-                    if '2' in user_options :
                         download_thumbnail = True
-                    if '3' in  user_options :
+                    if '2' in  user_options :
                         download_meta_data = True
                         
 
